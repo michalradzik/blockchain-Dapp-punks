@@ -12,9 +12,15 @@ contract NFT is ERC721Enumerable, Ownable {
     uint256 public cost;
     uint256 public maxSupply;
     uint256 public allowMintingOn;
+    uint256 public maxMintAmount = 5;
+    bool public paused = false;
+
+    mapping(address => bool) public whitelisted; // Mapa przechowująca whitelistę
 
     event Mint(uint256 amount, address minter);
     event Withdraw(uint256 amount, address owner);
+    event Paused(bool isPaused);
+    event AddedToWhitelist(address indexed user); // Event dla dodania do whitelisty
 
     constructor(
         string memory _name,
@@ -30,63 +36,75 @@ contract NFT is ERC721Enumerable, Ownable {
         baseURI = _baseURI;
     }
 
+    // Funkcja mintowania tokenów
     function mint(uint256 _mintAmount) public payable {
-        // Only allow minting after specified time
-        require(block.timestamp >= allowMintingOn);
-        // Must mint at least 1 token
-        require(_mintAmount > 0);
-        // Require enough payment
-        require(msg.value >= cost * _mintAmount);
+        require(!paused, "Minting is paused");
+        require(block.timestamp >= allowMintingOn, "Minting not allowed yet");
+        require(_mintAmount > 0, "Mint amount must be greater than 0");
+        require(_mintAmount <= maxMintAmount, "Exceeds max mint amount per transaction");
+        require(msg.value >= cost * _mintAmount, "Not enough ether to mint");
+        require(whitelisted[msg.sender], "User is not whitelisted"); // Sprawdzamy, czy użytkownik jest na whitelistcie
 
         uint256 supply = totalSupply();
+        require(supply + _mintAmount <= maxSupply, "Not enough tokens left to mint");
 
-        // Do not let them mint more tokens than available
-        require(supply + _mintAmount <= maxSupply);
-
-        // Create tokens
-        for(uint256 i = 1; i <= _mintAmount; i++) {
+        for (uint256 i = 1; i <= _mintAmount; i++) {
             _safeMint(msg.sender, supply + i);
         }
 
-        // Emit event
         emit Mint(_mintAmount, msg.sender);
     }
 
-    // Return metadata IPFS url
-    // EG: 'ipfs://QmQ2jnDYecFhrf3asEWjyjZRX1pZSsNWG3qHzmNDvXa9qg/1.json'
+    // Funkcja dodająca użytkownika do whitelisty (tylko właściciel)
+    function addToWhitelist(address _user) public onlyOwner {
+        whitelisted[_user] = true;
+        emit AddedToWhitelist(_user); // Emitowanie eventu
+    }
+
+    // Funkcja zwracająca IPFS URI tokena
     function tokenURI(uint256 _tokenId)
         public
         view
         virtual
         override
-        returns(string memory)
+        returns (string memory)
     {
-        require(_exists(_tokenId), 'token does not exist');
-        return(string(abi.encodePacked(baseURI, _tokenId.toString(), baseExtension)));
+        require(_exists(_tokenId), "Token does not exist");
+        return string(abi.encodePacked(baseURI, _tokenId.toString(), baseExtension));
     }
 
-    function walletOfOwner(address _owner) public view returns(uint256[] memory) {
+    function walletOfOwner(address _owner) public view returns (uint256[] memory) {
         uint256 ownerTokenCount = balanceOf(_owner);
         uint256[] memory tokenIds = new uint256[](ownerTokenCount);
-        for(uint256 i; i < ownerTokenCount; i++) {
+        for (uint256 i; i < ownerTokenCount; i++) {
             tokenIds[i] = tokenOfOwnerByIndex(_owner, i);
         }
         return tokenIds;
     }
 
-    // Owner functions
-
+    // Funkcja do wypłacania środków przez właściciela kontraktu
     function withdraw() public onlyOwner {
         uint256 balance = address(this).balance;
 
         (bool success, ) = payable(msg.sender).call{value: balance}("");
-        require(success);
+        require(success, "Withdraw failed");
 
         emit Withdraw(balance, msg.sender);
     }
 
+    // Funkcja do ustawienia nowego kosztu mintowania
     function setCost(uint256 _newCost) public onlyOwner {
         cost = _newCost;
     }
 
+    // Właściciel może ustawić maksymalną liczbę tokenów do mintowania w jednej transakcji
+    function setMaxMintAmount(uint256 _newMaxMintAmount) public onlyOwner {
+        maxMintAmount = _newMaxMintAmount;
+    }
+
+    // Funkcja wstrzymująca lub wznawiająca mintowanie, tylko dla właściciela
+    function setPaused(bool _state) public onlyOwner {
+        paused = _state;
+        emit Paused(_state);
+    }
 }

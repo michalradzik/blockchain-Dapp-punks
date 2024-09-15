@@ -1,0 +1,10 @@
+.nft-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .nft-item {
+    margin: 10px;
+    text-align: center;
+  }

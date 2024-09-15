@@ -1,3 +1,41 @@
-[ZoneTransfer]
-ZoneId=3
-HostUrl=https://dappuniversity.teachable.com/
+import { useState } from 'react';
+
+function Mint({ provider, nft, cost, setIsLoading }) {
+  const [mintAmount, setMintAmount] = useState(1); // Default to minting 1 NFT
+
+  const mintNFT = async () => {
+    try {
+      setIsLoading(true);
+      const signer = provider.getSigner();
+
+      // Calculate total cost based on the number of NFTs
+      const totalCost = (cost * mintAmount).toString();
+
+      // Call the mint function from the contract
+      const transaction = await nft.connect(signer).mint(mintAmount, { value: totalCost });
+      await transaction.wait();
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Minting failed:', error);
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Mint NFTs</h2>
+      <input
+        type="number"
+        min="1"
+        value={mintAmount}
+        onChange={(e) => setMintAmount(e.target.value)}
+        placeholder="Number of NFTs"
+      />
+      <button onClick={mintNFT}>Mint {mintAmount} NFTs</button>
+    </div>
+  );
+}
+
+export default Mint;
+
